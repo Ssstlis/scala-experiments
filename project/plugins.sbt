@@ -1,4 +1,4 @@
-resolvers += "Typesafe repo" at "http://repo.typesafe.com/typesafe/releases/"
+resolvers += ("Typesafe repo" at "http://repo.typesafe.com/typesafe/releases/").withAllowInsecureProtocol(true)
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.3.4")
 addSbtPlugin("com.sksamuel.scapegoat" %% "sbt-scapegoat" % "1.0.9")

@@ -37,6 +37,8 @@ lazy val common = project
       "org.typelevel"     %% "cats-effect"            % "2.0.0",
       "org.typelevel"     %% "cats-core"              % "2.0.0",
       "com.github.cb372"  %% "cats-retry-core"        % "0.3.0",
-      "com.github.cb372"  %% "cats-retry-cats-effect" % "0.3.0"
+      "com.github.cb372"  %% "cats-retry-cats-effect" % "0.3.0",
+      "com.chuusai"       %% "shapeless"              % "2.3.3" ,
+
     )
   )

@@ -1,8 +1,14 @@
 
-import cats.FlatMap
+import cats.arrow.ArrowChoice
+import cats.{FlatMap, Id}
 import cats.data.Kleisli
+import cats.implicits._
 
 object ReComposeTest {
+
+  ArrowChoice[Function1]
+
+  ((_: String) => 3).merge(_ => true)
 
   implicit class FirstApproxReCompose[A, B, C](run: A => B => C) {
     def >*>[A1, B1, C1](f: A1 => B1 => C1): (A, A1) => (B => C, B1 => C1) = {
@@ -52,15 +58,11 @@ object ReComposeTest {
     }
   }
 
-  implicit val reComposeFuncFuncInstance: ReCompose {
-    type F[X, X1] = X => X1
-
-    type G[X, X1] = X => X1
-  } = new ReCompose {
+  implicit val reComposeFuncFuncInstance: ReCompose.Aux[Function1, Function1] = new ReCompose {
     type F[X, X1] = X => X1
     type G[X, X1] = X => X1
 
-    override def pairCompose[A, A1, B, C, D](f: A => C => D)(g: A1 => B => C): ((A, A1)) => B => D = { case (a, a1) =>
+    def pairCompose[A, A1, B, C, D](f: A => C => D)(g: A1 => B => C): ((A, A1)) => B => D = { case (a, a1) =>
       f(a) compose g(a1)
     }
   }
@@ -73,7 +75,7 @@ object ReComposeTest {
     type F[X, X1] = X => X1
     type G[X, X1] = Kleisli[Y, X, X1]
 
-    override def pairCompose[A, A1, B, C, D](f: A => Kleisli[Y, C, D])(g: A1 => Kleisli[Y, B, C]): ((A, A1)) => Kleisli[Y, B, D] = {
+    def pairCompose[A, A1, B, C, D](f: A => Kleisli[Y, C, D])(g: A1 => Kleisli[Y, B, C]): ((A, A1)) => Kleisli[Y, B, D] = {
       case (a, a1) => f(a).compose(g(a1))
     }
   }
@@ -87,14 +89,19 @@ object ReComposeTest {
 
     type F[X, X1] = Kleisli[Y, X, X1]
 
-    override def pairCompose[A, A1, B, C, D](f: Kleisli[Y, A, Kleisli[Y, C, D]])(g: Kleisli[Y, A1, Kleisli[Y, B, C]]): Kleisli[Y, (A, A1), Kleisli[Y, B, D]] = {
+    def pairCompose[A, A1, B, C, D](f: Kleisli[Y, A, Kleisli[Y, C, D]])(g: Kleisli[Y, A1, Kleisli[Y, B, C]]): Kleisli[Y, (A, A1), Kleisli[Y, B, D]] = {
       Kleisli { case (a, a1) => Y.flatMap(f.run(a))(f1 => Y.map(g.run(a1))(f1.compose(_))) }
     }
   }
 
-  val a: String => String => Int = _ => _ => 3
-  val b: String => Int => String = _ => _ => "123"
+  val a: String => String => Int = f1 => f2 => (f1.toInt + 1) * (f2.toInt + 1)
+  val b: String => Int => String = f1 => f2 => ((f1.toInt + 1) * f2).toString
+
+  val c: String => Kleisli[Id, Int, String] = _ => Kleisli[Id, Int, String](_ => "123")
+  val d: String => Kleisli[Id, String, Boolean] = _ => Kleisli[Id, String, Boolean](_ => true)
   import ReCompose._
 
   a.pairAndThen(b)
+
+  c.pairAndThen(d)
 }
