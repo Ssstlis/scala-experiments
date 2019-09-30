@@ -4,6 +4,7 @@ import com.softwaremill.clippy.ClippySbtPlugin.autoImport.clippyColorsEnabled
 
 addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
+addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.6")
 
 lazy val common = project
   .in(file("."))
