@@ -22,14 +22,9 @@ object Main {
     val e: String => Kleisli[Id, Boolean, Long] = _ => Kleisli[Id, Boolean, Long](_ => 0L)
     val f: String => Kleisli[Id, Long, String] = _ => Kleisli[Id, Long, String](_ => "1234")
 
-    class toReComposeOps1[A <: Product, B, C](f: A => B => C) {
-      def pairAndThen[A1, D, L <: Nat, P](g: A1 => C => D)(
-        implicit
-        L1: Length.Aux[A, L],
-        P: Prepend.Aux[A, A1, P],
-        S: Split[P, L],
-        C1: ClassTag[A],
-        C2: ClassTag[A1]
+    class toReComposeOps1[A: ClassTag, B, C](f: A => B => C) {
+      def pairAndThen[A1: ClassTag, D, L <: Nat, P](g: A1 => C => D)(
+        implicit L1: Length.Aux[A, L], P: Prepend.Aux[A, A1, P], S: Split[P, L]
       ): P => B => D = {
         p => S(p) match {
           case (a: A, a1: A1) => f(a) andThen g(a1)
@@ -40,11 +35,11 @@ object Main {
       def >:+> : Int = 3
     }
 
-    def toReCo[A <: Product, B, C](f: A => B => C): toReComposeOps1[A, B, C] = {
+    def toReCo[A: ClassTag, B, C](f: A => B => C): toReComposeOps1[A, B, C] = {
       new toReComposeOps1[A, B, C](f)
     }
 
-    toReCo(a.pairAndThen(b)).pairAndThen(c1)
+    toReCo(a.pairAndThen(b)).pairAndThen(c1.compose((_: Tuple1[Long])._1))
 
     c.pairAndThen(d).pairAndThen(e).pairAndThen(f)(("", ("", ("", ""))))
 
