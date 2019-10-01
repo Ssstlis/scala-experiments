@@ -1,6 +1,8 @@
 
 import cats.FlatMap
 import cats.data.Kleisli
+import shapeless.Generic
+import shapeless.ops.tuple.{Length, Prepend}
 
 object ReComposeTest {
   type Kl[F[_], A, B] = Kleisli[F, A, B]
