@@ -1,8 +1,6 @@
 
 import cats.FlatMap
 import cats.data.Kleisli
-import shapeless.Generic
-import shapeless.ops.tuple.{Length, Prepend}
 
 object ReComposeTest {
   type Kl[F[_], A, B] = Kleisli[F, A, B]
@@ -85,15 +83,15 @@ object ReComposeTest {
       }
 
       def pairCompose[A, A1, B, C, D](f: Kl[Y, A, C => D])(g: Kl[Y, A1, B => C]): Kl[Y, (A, A1), B => D] = {
-        Kleisli { case (a, a1) => Y.flatMap(g.run(a1))(g1 => Y.map(f.run(a))(_ compose g1))}
+        Kleisli { case (a, a1) => Y.map2(f.run(a), g.run(a1))(_ compose _) }
       }
     }
   }
 
-  implicit def reComposeKleisliKleisliInstance1[Y[_]](implicit Y: FlatMap[Y]): ReCompose[Kl[Y, ?, ?], Kl[Y, ?, ?]] = {
+  implicit def reComposeKleisliKleisliInstance1[Y[_]](implicit Y: FlatMap[Y]): ReCompose[Kleisli[Y, ?, ?], Kleisli[Y, ?, ?]] = {
     new ReCompose[Kl[Y, ?, ?], Kl[Y, ?, ?]] {
       def pairCompose[A, A1, B, C, D](f: Kl[Y, A, Kl[Y, C, D]])(g: Kl[Y, A1, Kl[Y, B, C]]): Kl[Y, (A, A1), Kl[Y, B, D]] = {
-        Kleisli { case (a, a1) => Y.flatMap(g.run(a1))(g1 => Y.map(f.run(a))(_ compose g1))}
+        Kleisli { case (a, a1) => Y.map2(f.run(a), g.run(a1))(_ compose _) }
       }
 
       override def preCompose[A, B, C, D](f: Kl[Y, B, C])(g: Kl[Y, A, Kl[Y, C, D]]): Kl[Y, A, Kl[Y, B, D]] = {

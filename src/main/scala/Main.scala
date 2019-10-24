@@ -1,13 +1,15 @@
 import scala.reflect.ClassTag
 
 import ReComposeTest._
-import cats.Id
+import cats.{Id, Monad}
 import cats.data.Kleisli
 import shapeless.ops.tuple.{Length, Prepend, Split}
-import shapeless.{Nat, Succ, _0}
+import shapeless.{Lazy, Nat, Succ, _0}
 import shapeless.syntax.std.tuple._
 import shapeless.syntax.nat._
 import ReCompose._
+import cats.arrow.Compose
+import cats.implicits._
 
 object Main {
   def main(args: Array[String]): Unit = {
@@ -22,29 +24,77 @@ object Main {
     val e: String => Kleisli[Id, Boolean, Long] = _ => Kleisli[Id, Boolean, Long](_ => 0L)
     val f: String => Kleisli[Id, Long, String] = _ => Kleisli[Id, Long, String](_ => "1234")
 
-    class toReComposeOps1[A: ClassTag, B, C](f: A => B => C) {
-      def pairAndThen[A1: ClassTag, D, L <: Nat, P](g: A1 => C => D)(
-        implicit L1: Length.Aux[A, L], P: Prepend.Aux[A, A1, P], S: Split[P, L]
-      ): P => B => D = {
-        p => S(p) match {
-          case (a: A, a1: A1) => f(a) andThen g(a1)
-        }
+    trait Getter[F[_, _]] {
+      type G[_]
+      def get[A, B](f: F[A, G[B]])(a: A): G[B]
+    }
+
+
+    implicit class toReComposeOps1[A: ClassTag, B, C, F[_, _]: Compose](f: A => F[B, C]) {
+
+      def >++>[A1: ClassTag, D, L <: Nat, P](g: A1 => F[C, D])(
+        implicit
+        L1: Length.Aux[A, L],
+        P: Prepend.Aux[A, A1, P],
+        S: Split[P, L]
+      ): P => F[B, D] = p => S(p) match {
+        case (a: A, a1: A1) => Compose[F].compose(g(a1), f(a))
       }
-      def >++> : Int = 3
-      def >+:> : Int = 3
-      def >:+> : Int = 3
+
+      def >:+>[A1: ClassTag, D, L <: Nat, P](g: A1 => F[C, D])(
+        implicit
+        L1: Length.Aux[A, L],
+        P: Prepend.Aux[A, Tuple1[A1], P],
+        S: Split[P, L]
+      ): P => F[B, D] = p => S(p) match {
+        case (a: A, a1: A1) => Compose[F].compose(g(a1), f(a))
+      }
+
+      def >+:>[A1: ClassTag, D, L <: Nat, P](g: A1 => F[C, D])(
+        implicit
+        L1: Length.Aux[A, L],
+        P: Prepend.Aux[Tuple1[A], A1, P],
+        S: Split[P, L]
+      ): P => F[B, D] = p => S(p) match {
+        case (a: A, a1: A1) => Compose[F].compose(g(a1), f(a))
+      }
     }
 
-    def toReCo[A: ClassTag, B, C](f: A => B => C): toReComposeOps1[A, B, C] = {
-      new toReComposeOps1[A, B, C](f)
+    implicit class toReComposeOps2[A: ClassTag, B, C, F[_, _]: Compose, G[_]: Monad](f: Kleisli[G, A, F[B, C]]) {
+
+      def >++>[A1: ClassTag, D, L <: Nat, P](g: Kleisli[G, A1, F[C, D]])(
+        implicit
+        L1: Length.Aux[A, L],
+        P: Prepend.Aux[A, A1, P],
+        S: Split[P, L]
+      ): Kleisli[G, P, F[B, D]] = Kleisli(p => S(p) match {
+        case (a: A, a1: A1) => Monad[G].map2(g(a1), f(a))(Compose[F].compose)
+      })
+
+      def >:+>[A1: ClassTag, D, L <: Nat, P](g: Kleisli[G, A1, F[C, D]])(
+        implicit
+        L1: Length.Aux[A, L],
+        P: Prepend.Aux[A, Tuple1[A1], P],
+        S: Split[P, L]
+      ): Kleisli[G, P, F[B, D]] = Kleisli(p => S(p) match {
+        case (a: A, a1: A1) => Monad[G].map2(g(a1), f(a))(Compose[F].compose)
+      })
+
+      def >+:>[A1: ClassTag, D, L <: Nat, P](g: Kleisli[G, A1, F[C, D]])(
+        implicit
+        L1: Length.Aux[A, L],
+        P: Prepend.Aux[Tuple1[A], A1, P],
+        S: Split[P, L]
+      ): Kleisli[G, P, F[B, D]] = Kleisli(p => S(p) match {
+        case (a: A, a1: A1) => Monad[G].map2(g(a1), f(a))(Compose[F].compose)
+      })
     }
 
-    toReCo(a.pairAndThen(b)).pairAndThen(c1.compose((_: Tuple1[Long])._1))
+    val testing = (a >**> b) >++> (c1 >**> d1)
 
-    c.pairAndThen(d).pairAndThen(e).pairAndThen(f)(("", ("", ("", ""))))
 
-    println(a.pairAndThen(b)("1", "2")("3"))
-
-    println(c.pairAndThen(d)("1", "2")(0))
+    ()
   }
+
+
 }
