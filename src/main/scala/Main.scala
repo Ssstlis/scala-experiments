@@ -1,21 +1,153 @@
-import scala.reflect.ClassTag
+import scala.concurrent.{ExecutionContext, Future}
 
-import cats.{Apply, Id, Monad}
-import cats.data.Kleisli
-import shapeless.ops.tuple.{Length, Prepend, Split}
-import shapeless.{HNil, Lazy, Nat, Poly, Succ, _0}
-import shapeless.syntax.std.tuple._
-import shapeless.syntax.nat._
-import ReCompose._
-import cats.arrow.{Arrow, Compose}
-import cats.effect.IO
+import Main.ReFunc.Aux
+import cats.{Id, MonadError}
+import cats.data.{Kleisli, OptionT}
 import cats.implicits._
-import shapeless.ops.tuple
-import cats.syntax.arrow.toArrowOps
-import cats.syntax.compose.toComposeOps
+import lib.Instances._
+import lib.ReCompose.toReComposeOps
+import lib.TupleOps._
+import shapeless.{::, HNil, _}
 
 object Main {
+
+/*  sealed trait List[+A] extends Product with Serializable {
+    def foldLeft[B](d: => B)(f: (A, B) => B): B = {
+      @scala.annotation.tailrec
+      def loop(acc: => B, rest: List[A]): B = {
+        rest match {
+          case Nil => acc
+          case Cons(head, Nil) => f(head, acc)
+          case Cons(head, tail) => loop(f(head, acc), tail)
+        }
+      }
+
+      loop(d, this)
+    }
+
+    def +:[B <: A](elem: B): List[A] = Cons(elem, this)
+
+    def foldRight[B](d: => B)(f: (A, B) => B): B = {
+      this match {
+        case Nil => d
+        case Cons(head, Nil) => f(head, d)
+        case Cons(head, tail) =>
+      }
+    }
+  }
+
+  final case object Nil extends List[Nothing]
+  final case class Cons[A](head: A, tail: List[A]) extends List[A]*/
+
+  trait Func[T] extends DepFn1[T] with Serializable
+
+  object Func {
+    def apply[T](implicit func: Func[T]): Aux[T, func.Out] = func
+
+    type Aux[T, Out0] = Func[T] { type Out = Out0 }
+
+    implicit def fix[A, B]: Aux[A :: HNil => B, A => B] = {
+      new Func[A :: HNil => B] {
+        type Out = A => B
+
+        def apply(t: (A :: HNil) => B): Out = a => t(a :: HNil)
+      }
+    }
+
+    implicit def recurse[H, R <: HList, B](
+      implicit func: Func[R => B]
+    ): Aux[H :: R => B, H => func.Out] = {
+      new Func[H :: R => B] {
+        type Out = H => func.Out
+
+        def apply(t: H :: R => B): Out = h => {
+          func(r => t(h :: r))
+        }
+      }
+    }
+  }
+
+  trait ReFunc[T] extends DepFn1[T] with Serializable
+
+  object ReFunc {
+    def apply[T](implicit func: ReFunc[T]): Aux[T, func.Out] = func
+
+    type Aux[T, Out0] = ReFunc[T] { type Out = Out0 }
+
+    implicit def fix[A, B, C, D](
+      implicit ev$: <:!<[B, C => D]
+    ): Aux[A => B, A :: HNil => B] = {
+      new ReFunc[A => B] {
+        type Out = A :: HNil => B
+
+        def apply(t: A => B): Out = {
+          case a :: _ => t(a)
+        }
+      }
+    }
+
+    implicit def recurse[A, B, C, D, H <: HList](
+      implicit
+      func: Aux[B => C, H => D]
+    ): Aux[A => B => C, A :: H => D] = {
+      new ReFunc[A => B => C] {
+        type Out = A :: H => D
+
+        def apply(t: A => B => C): A :: H => D = {
+          case a :: h => func(t(a))(h)
+        }
+      }
+    }
+  }
+
+  val refuncAuxRec2: ReFunc.Aux[Int => Long => Boolean => String, Int :: Long :: Boolean :: HNil => String] = {
+    ReFunc[Int => Long => Boolean => String]
+  }
+
+  val refuncAuxRec1: ReFunc.Aux[Int => Long => Boolean, Int :: Long :: HNil => Boolean] = {
+    ReFunc[Int => Long => Boolean]
+  }
+
+  val refuncAuxFix: ReFunc.Aux[Int => Boolean, Int :: HNil => Boolean] = {
+    ReFunc[Int => Boolean]
+  }
+
+  val funcAuxRec2: Func.Aux[Int :: Long :: Boolean :: HNil => String, Int => Long => Boolean => String] = {
+    Func[Int :: Long :: Boolean :: HNil => String]
+  }
+
+  val funcAuxRec1: Func.Aux[Int :: Long :: HNil => String, Int => Long => String] = {
+    Func[Int :: Long :: HNil => String]
+  }
+
+  val funcAuxFix: Func.Aux[Int :: HNil => String, Int => String] = {
+    Func[Int :: HNil => String]
+  }
+
+  def funcTestA[L <: HList, B](f: L => B)(implicit func: Func[L => B]) = {
+    func(f)
+  }
+
   def main(args: Array[String]): Unit = {
+
+    def safeSequence[A](futures: List[Future[A]])(implicit ec: ExecutionContext): Future[(List[Throwable], List[A])] = {
+      futures.foldLeft(Future.successful(List.newBuilder[Throwable], List.newBuilder[A])) { (acc, elem) =>
+        val addS = (succ: A) => acc.map { case (f, s) => (f, s += succ) }
+        val addE = (ex: Throwable) => acc.map { case (f, s) => (f += ex, s) }
+        elem.value.map(_.fold(addE, addS)).getOrElse(
+          elem.flatMap(addS).recoverWith { case ex => addE(ex) }
+        )
+      }.map { case (f, s) => (f.result(), s.result()) }
+    }
+
+
+    def funcTest[A, B](f: A => B): B = ???
+    def funcTest2[A, B, C](f: A => B => C): C = ???
+
+    funcTest((_: Int) => (_: Long) => "")
+    funcTest2((_: Int) => (_: Long) => (_: Boolean) => "")
+    import shapeless.ops.hlist._
+    implicitly[SelectAll[Int :: Long :: Boolean :: String :: HNil, Int :: Boolean ::HNil]].apply(3 :: 1L :: false :: "String" :: HNil)
 
     val a: String => String => Int = f1 => f2 => (f1.toInt + 1) * (f2.toInt + 1)
     val b: String => Int => String = f1 => f2 => ((f1.toInt + 1) * f2).toString
@@ -26,177 +158,6 @@ object Main {
     val d: String => Kleisli[Id, String, Boolean] = _ => Kleisli[Id, String, Boolean](_ => true)
     val e: String => Kleisli[Id, Boolean, Long] = _ => Kleisli[Id, Boolean, Long](_ => 0L)
     val f: String => Kleisli[Id, Long, String] = _ => Kleisli[Id, Long, String](_ => "1234")
-
-//    def testProduct[T <: Product](value: T): T = value
-//
-//    testProduct("sd,jfb")
-
-    // A B C D
-    // 0 0 0 1
-    // 0 0 1 0
-    // 0 0 1 1
-    // 0 1 0 0
-    // 0 1 1 0
-    // 0 1 1 1
-    // 1 0 0 0
-    // 1 0 0 1
-    // 1 0 1 0
-    // 1 0 1 1
-    // 1 1 0 0
-    // 1 1 0 1
-    // 1 1 1 0
-    // 1 1 1 1
-
-
-    class SplitArrowed[F[_, _]] {
-      def apply[A, B <: Nat](arg: Split[A, B])(implicit F: Arrow[F]): F[A, arg.Out] = {
-        F.lift(arg(_: A))
-      }
-    }
-
-    class PrependArrowed[F[_, _]] {
-      def apply[A, B](arg: Prepend[A, B])(implicit F: Arrow[F]): F[(A, B), arg.Out] = {
-        F.lift { case (b, d) => arg(b, d) }
-      }
-    }
-
-    def arrowedS[F[_, _]]: SplitArrowed[F] = new SplitArrowed[F]
-
-    def arrowedP[F[_, _]]: PrependArrowed[F] = new PrependArrowed[F]
-
-    def tupled[F[_, _]: Arrow, A]: F[A, Tuple1[A]] = Arrow[F].lift(Tuple1(_: A))
-
-    def tupledR[F[_, _]: Arrow, A, B]: F[(A, B), (A, Tuple1[B])] = {
-      tupled[F, B].second[B]
-    }
-
-    def tupledL[F[_, _]: Arrow, A, B]: F[(A, B), (Tuple1[A], B)] = {
-      tupled[F, A].first[B]
-    }
-
-    implicit class toReComposeTupleOps2[A, B, F[_, _]: Arrow](f: F[A, B]) {
-      def &++&[C](g: F[A, C])(implicit P: Prepend[B, C]): F[A, P.Out] = {
-        (f &&& g) >>> arrowedP[F](P)
-      }
-
-      def &:+&[C](g: F[A, C])(implicit P: Prepend[B, Tuple1[C]]): F[A, P.Out] = {
-        (f &&& (g >>> tupled[F, C])) >>> arrowedP[F](P)
-      }
-
-      def &+:&[C](g: F[A, C])(implicit P: Prepend[Tuple1[B], C]): F[A, P.Out] = {
-        ((f >>> tupled[F, B]) &&& g) >>> arrowedP[F](P)
-      }
-    }
-
-
-    implicit class toReComposeTupleOps3[A <: Product, B <: Product, F[_, _]: Arrow](f: F[A, B]) {
-      //A, B, C, D - Product
-      def *+++*[C <: Product, D <: Product, N1 <: Nat, T1](g: F[C, D])(
-        implicit
-        L1: Length.Aux[A, N1],
-        P1: Prepend.Aux[A, C, T1],
-        P2: Prepend[B, D],
-        S1: Split.Aux[T1, N1, (A, C)]
-      ): F[T1, P2.Out] = {
-        arrowedP[F](P2) <<< (f *** g) <<< arrowedS[F](S1)
-      }
-
-      //A, B, C - Product
-      def *+++*[C <: Product, D, N1 <: Nat, N2 <: Nat, T1, T2](g: F[C, D])(
-        implicit
-        L1: Length.Aux[A, N1],
-        L2: Length.Aux[B, N2],
-        P1: Prepend.Aux[A, C, T1],
-        P2: Prepend.Aux[B, Tuple1[D], T2],
-        S1: Split.Aux[T1, N1, (A, C)]
-      ): F[T1, T2] = {
-        arrowedS[F](S1) >>> (f *** g) >>> tupledR[F, B, D] >>> arrowedP[F](P2)
-      }
-
-      //A, B, D - Product
-      def *+++*[C, D <: Product, N1 <: Nat, N2 <: Nat, T1, T2](g: F[C, D])(
-        implicit
-        L1: Length.Aux[A, N1],
-        L2: Length.Aux[B, N2],
-        P1: Prepend.Aux[A, Tuple1[C], T1],
-        P2: Prepend.Aux[B, D, T2],
-        S1: Split.Aux[T1, N1, (A, C)]
-      ): F[T1, T2] = {
-        (f *** g) <<< tupledR[F, A, C]
-        arrowedS[F](S1) >>> (f *** g) >>> tupledR[F, A, C] >>> arrowedP[F](P2)
-      }
-
-      //A, B, C, D, - Product
-      /*def *+:+*[C, D, N1 <: Nat, T1](g: F[C, D])(
-        implicit
-        L1: Length.Aux[A, N1],
-        P1: Prepend.Aux[A, C, T1],
-        P2: Prepend[B, D],
-        S1: Split.Aux[T1, N1, (A, C)]
-      ): F[T1, P2.Out] = {
-        ((f *** g) <<< arrowed[F](S1)) >>> Arrow[F].lift[(B, D), P2.Out] { case (b, d) => P2(b, d) }
-      }*/
-
-//      def &:+&[C](g: F[A, C])(implicit P: Prepend[B, Tuple1[C]]): F[A, P.Out] = {
-//        (f &&& (g >>> Arrow[F].lift(Tuple1(_: C)))) >>> Arrow[F].lift[(B, Tuple1[C]), P.Out] { case (b, c) => P(b, c) }
-//      }
-//
-//      def &+:&[C](g: F[A, C])(implicit P: Prepend[Tuple1[B], C]): F[A, P.Out] = {
-//        ((f >>> Arrow[F].lift(Tuple1(_: B))) &&& g) >>> Arrow[F].lift[(Tuple1[B], C), P.Out] { case (b, c) => P(b, c) }
-//      }
-    }
-
-    // A A1
-    // 0 1
-    // 1 0
-    // 1 1
-
-    implicit class toReComposeTupleProductOps[A <: Product, B, C, F[_, _]: Arrow, G[_, _]](f: F[A, G[B, C]])(implicit RG: ReCompose[F, G]) {
-
-      def >++>[A1 <: Product, D, L <: Nat, P](g: F[A1, G[C, D]])(
-        implicit
-        L1: Length.Aux[A, L],
-        P: Prepend.Aux[A, A1, P],
-        S: Split.Aux[P, L, (A, A1)]
-      ): F[P, G[B, D]] = (g <**< f) <<< arrowedS[F](S)
-
-      def >:+>[A1, D, L <: Nat, P](g: F[A1, G[C, D]])(
-        implicit
-        L1: Length.Aux[A, L],
-        P: Prepend.Aux[A, Tuple1[A1], P],
-        S: Split.Aux[P, L, (A, A1)]
-      ): F[P, G[B, D]] = (g <**< f) <<< arrowedS[F](S)
-
-      def <++<[A1 <: Product, D, L <: Nat, P](g: F[A1, G[D, B]])(
-        implicit
-        L1: Length.Aux[A1, L],
-        P: Prepend.Aux[A1, A, P],
-        S: Split.Aux[P, L, (A1, A)]
-      ): F[P, G[D, C]] = (f <**< g) <<< arrowedS[F](S)
-
-      def <:+<[A1, D, P](g: F[A1, G[D, B]])(
-        implicit
-        P: Prepend.Aux[Tuple1[A1], A, P],
-        S: Split.Aux[P, Nat._1, (A1, A)]
-      ): F[P, G[D, C]] = (f <**< g) <<< arrowedS[F](S)
-    }
-
-    implicit class toReComposeTupleOps[A, B, C, F[_, _]: Arrow, G[_, _]](f: F[A, G[B, C]])(implicit RG: ReCompose[F, G]) {
-
-      def >+:>[A1 <: Product, D, P](g: F[A1, G[C, D]])(
-        implicit
-        P: Prepend.Aux[Tuple1[A], A1, P],
-        S: Split.Aux[P, Nat._1, (A, A1)]
-      ): F[P, G[B, D]] = (g <**< f) <<< arrowedS[F](S)
-
-      def <+:<[A1 <: Product, D, L <: Nat, P](g: F[A1, G[D, B]])(
-        implicit
-        L1: Length.Aux[A1, L],
-        P: Prepend.Aux[A1, Tuple1[A], P],
-        S: Split.Aux[P, L, (A1, A)]
-      ): F[P, G[D, C]] = (f <**< g) <<< arrowedS[F](S)
-
-    }
 
     val testing0: ((String, String, Long, Boolean)) => String => Char = (b <**< a) >++> (d1 <**< c1)
 
