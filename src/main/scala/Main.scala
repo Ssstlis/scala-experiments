@@ -1,9 +1,10 @@
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.matching.Regex
 
 import Main.ReFunc.Aux
 import cats.arrow.{Arrow, Compose, Profunctor}
 import cats.{Id, Monad, MonadError}
-import cats.data.{Kleisli, OptionT}
+import cats.data.{Kleisli, OptionT, ReaderT}
 import cats.implicits._
 import lib.Instances._
 import lib.ReCompose.toReComposeOps
@@ -111,38 +112,32 @@ object Main {
 
     val F: Profunctor[F]
 
-    def combineP[A, B, C](f: F[A, F[B, C]]): F[(A, B), C]
+    def combineP[A, B, C]: F[A, F[B, C]] => F[(A, B), C]
 
-    def combineH[A, B <: HList, C](f: F[A, F[B, C]]): F[A :: B, C] = {
+    def combineH[A, B <: HList, C]: F[A, F[B, C]] => F[A :: B, C] = f => {
       F.lmap(combineP(f)) { case a :: b => (a, b) }
     }
 
-    def splitP[A, B, C](f: F[(A, B), C]): F[A, F[B, C]]
+    def splitP[A, B, C]: F[(A, B), C] => F[A, F[B, C]]
 
-    def splitH[A, B <: HList, C](f: F[A :: B, C]): F[A, F[B, C]] = {
+    def splitH[A, B <: HList, C]: F[A :: B, C] => F[A, F[B, C]] = f => {
       splitP(F.lmap(f) { case (a, b) => a :: b })
     }
 
-    def partialP[A, B, C, D, E](f: F[(A, B), D], ap: F[B, D] => E): F[A, E]
+    def partialP[A, B, C, D, E]: F[(A, B), D] => (F[B, D] => E) => F[A, E]
 
-    def partialH[A, B <: HList, C, D, E](f: F[A :: B, D], ap: F[B, D] => E): F[A, E] = {
-      partialP(F.lmap[A :: B, D, (A, B)](f) { case (a, b) => a :: b }, ap)
+    def partialH[A, B <: HList, C, D, E]: F[A :: B, D] => (F[B, D] => E) => F[A, E] = f => ap => {
+      partialP(F.lmap[A :: B, D, (A, B)](f) { case (a, b) => a :: b })(ap)
     }
   }
 
   implicit def stdRefreshInstanceForFunction1(implicit F0: Profunctor[? => ?]) = new ReFresh[? => ?] {
     val F = F0
-    def combineP[A, B, C](f: A => B => C): ((A, B)) => C = {
-      case (a, b) => f(a)(b)
-    }
+    def combineP[A, B, C] = f => { case (a, b) => f(a)(b) }
 
-    def splitP[A, B, C](f: ((A, B)) => C): A => B => C = a => b => {
-      f((a, b))
-    }
+    def splitP[A, B, C] = f => a => b => f((a, b))
 
-    def partialP[A, B, C, D, E](f: ((A, B)) => D, ap: (B => D) => E): A => E = {
-      a => ap(b => f((a, b)))
-    }
+    def partialP[A, B, C, D, E] = f => ap => a => ap(b => f((a, b)))
   }
 
   type KlF[F[_]] = {
@@ -152,16 +147,16 @@ object Main {
   implicit def stdRefreshInstanceForKleisli[F[_]: Monad](implicit F0: Profunctor[KlF[F]#Aux]) = {
     new ReFresh[KlF[F]#Aux] {
       val F = F0
-      def combineP[A, B, C](f: Kleisli[F, A, Kleisli[F, B, C]]): Kleisli[F, (A, B), C] = {
-        Kleisli { case (a, b) => f.run(a).flatMap(_.run(b)) }
+      def combineP[A, B, C] = f => Kleisli { case (a, b) =>
+        f.run(a).flatMap(_.run(b))
       }
 
-      def splitP[A, B, C](f: Kleisli[F, (A, B), C]): Kleisli[F, A, Kleisli[F, B, C]] = {
-        Kleisli(a => Kleisli((b: B) => f.run((a, b))).pure[F])
+      def splitP[A, B, C] = f => Kleisli { a =>
+        Kleisli((b: B) => f.run((a, b))).pure[F]
       }
 
-      def partialP[A, B, C, D, E](f: Kleisli[F, (A, B), D], ap: Kleisli[F, B, D] => E): Kleisli[F, A, E] = {
-        Kleisli(a => ap(f.local((a, _))).pure[F])
+      def partialP[A, B, C, D, E] = f => ap => Kleisli { a =>
+        ap(f.local((a, _))).pure[F]
       }
     }
   }
@@ -193,7 +188,7 @@ object Main {
 
         def apply(f: F[H :: R, B]): F[H, fn.Out] = {
           val ap: F[R, B] => fn.Out = fn(_)
-          FS.partialH(f, ap)
+          FS.partialH(f)(ap)
         }
       }
     }
@@ -233,6 +228,8 @@ object Main {
       }
     }
   }
+
+//  type Reads[A] = Kleisli[JsResult, JsValue, A]
 
   val refuncAuxRec2: ReFunc.Aux[Int => Long => Boolean => String, Int :: Long :: Boolean :: HNil => String] = {
     ReFunc[Int => Long => Boolean => String]

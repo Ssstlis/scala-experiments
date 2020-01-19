@@ -12,7 +12,8 @@ lazy val common = project
     scalaVersion := "2.12.10",
     scalacOptions := Seq(
       "-language:implicitConversions",
-        "-Xlog-implicits",
+      "-Xlog-implicits",
+      "-Ymacro-debug-verbose",
       "-language:higherKinds",
       "-language:existentials",
       "-Ywarn-unused",
