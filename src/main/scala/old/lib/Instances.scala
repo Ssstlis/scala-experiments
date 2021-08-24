@@ -1,4 +1,4 @@
-package lib
+package old.lib
 
 import cats.{Apply, Bimonad}
 import cats.arrow.Compose
@@ -10,7 +10,7 @@ import cats.syntax.compose.toComposeOps
 
 trait Instances {
 
-  implicit def stdFunction1ReComposeInstance[F[_, _]: Compose]: ReCompose[? => ?, F] = new ReCompose[? => ?, F] {
+  implicit def stdFunction1ReComposeInstance[F[_, _]: Compose]: ReCompose[* => *, F] = new ReCompose[* => *, F] {
     def preCompose[A, B, C, D] = g => f => g <<< f(_)
 
     def preAndThen[A, B, C, D] = g => f => f(_) <<< g
@@ -18,8 +18,8 @@ trait Instances {
     def pairCompose[A, A1, B, C, D] = g => f => { case (a1, a) => g(a) <<< f(a1) }
   }
 
-  implicit def stdKleisliReComposeInstance[F[_]: Apply, G[_, _]: Compose]: ReCompose[Kleisli[F, ?, ?], G] = {
-    new ReCompose[Kleisli[F, ?, ?], G] {
+  implicit def stdKleisliReComposeInstance[F[_]: Apply, G[_, _]: Compose]: ReCompose[Kleisli[F, *, *], G] = {
+    new ReCompose[Kleisli[F, *, *], G] {
 
       def preCompose[A, B, C, D] = g => _.map(g <<< _)
 
@@ -31,8 +31,8 @@ trait Instances {
     }
   }
 
-  implicit def stdCokleisliReComposeInstance[F[_]: Bimonad, G[_, _]: Compose]: ReCompose[Cokleisli[F, ?, ?], G] = {
-    new ReCompose[Cokleisli[F, ?, ?], G] {
+  implicit def stdCokleisliReComposeInstance[F[_]: Bimonad, G[_, _]: Compose]: ReCompose[Cokleisli[F, *, *], G] = {
+    new ReCompose[Cokleisli[F, *, *], G] {
       def preCompose[A, B, C, D] = g => _.map(g <<< _)
 
       def preAndThen[A, B, C, D] = g => _.map(_ <<< g)

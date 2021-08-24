@@ -1,4 +1,4 @@
-package lib
+package old.lib
 
 trait ReCompose[F[_, _], G[_, _]] {
   def preCompose[A, B, C, D]: G[C, D] => F[A, G[B, C]] => F[A, G[B, D]]

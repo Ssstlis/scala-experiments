@@ -1,12 +1,12 @@
-package lib
+package old.lib
 
 import cats.arrow.Arrow
-import lib.Helpers.{<~-~, tupled, tupledR, ~-~>}
+import Helpers.{<~-~, tupled, tupledR, ~-~>}
 import shapeless.Nat
 import shapeless.ops.tuple.{Length, Prepend, Split}
 import cats.implicits.toArrowOps
 import cats.implicits.toComposeOps
-import lib.ReCompose.toReComposeOps
+import ReCompose.toReComposeOps
 
 object TupleOps {
   implicit class toReComposeTupleOps2[A, B <: Product, F[_, _]: Arrow](f: F[A, B]) {

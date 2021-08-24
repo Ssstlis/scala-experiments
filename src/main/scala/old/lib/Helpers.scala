@@ -1,4 +1,4 @@
-package lib
+package old.lib
 
 import cats.arrow.Arrow
 import cats.syntax.strong.toStrongOps
