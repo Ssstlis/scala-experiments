@@ -9,6 +9,24 @@ object Assembler2 extends App {
 
   type RegOr = Either[String, Int]
   object Cmd {
+
+    def of(string: String): Option[Cmd] =
+      string.split("\\s").toList match {
+        case "jmp" :: label :: _ => Some(Jmp(label))
+        case "call" :: label :: _ => Some(Call(label))
+        case "je" :: label :: _ => Some(Je(label))
+        case "jne" :: label :: _ => Some(Jne(label))
+        case "jge" :: label :: _ => Some(Jge(label))
+        case "jg" :: label :: _ => Some(Jg(label))
+        case "jl" :: label :: _ => Some(Jl(label))
+        case "jle" :: label :: _ => Some(Jle(label))
+        case "inc" :: reg :: _ => Some(Inc(reg))
+        case "dec" :: reg :: _ => Some(Dec(reg))
+        case "mov" :: reg :: value :: _ => Some(Mov(reg, value.toIntOption.toRight(value)))
+        case "jnz" :: reg :: value :: _ => value.toIntOption.map(Jnz(reg.toIntOption.toRight(reg), _))
+        case _ => None
+      }
+
     final case class Inc(reg: String) extends Cmd
     final case class Dec(reg: String) extends Cmd
     final case class Mov(reg: String, regOr: RegOr) extends Cmd
@@ -31,17 +49,7 @@ object Assembler2 extends App {
     final case class Msg(template: String) extends Cmd
   }
 
-  import Cmd._
-
-  def asCmds(list: List[String]) = list.flatMap { s =>
-    s.split("\\s").toList match {
-      case "inc" :: reg :: _ => Some(Inc(reg))
-      case "dec" :: reg :: _ => Some(Dec(reg))
-      case "mov" :: reg :: value :: _ => Some(Mov(reg, value.toIntOption.toRight(value)))
-      case "jnz" :: reg :: value :: _ => value.toIntOption.map(Jnz(reg.toIntOption.toRight(reg), _))
-      case _ => None
-    }
-  }
+  def asCmds(list: List[String]) = list.flatMap(Cmd.of)
 
   def printSt(list: List[String]) = list.map(s => s"\"$s\"").toString()
 
@@ -56,23 +64,21 @@ object Assembler2 extends App {
       case s @ s"msg$_" => s
       case s => s.replaceAll("\\s+", " ")
     }
-    .span(s => !s.endsWith(":")).pipe(t => t.copy(_2 = t._2))
+    .span(s => !s.endsWith(":"))
+    .pipe(t => t.copy(_2 = t._2))
 
-
-  def dropState[T](state: Option[(String, List[String])],acc: List[(String, ListZipper[T])])(f: List[String] => List[T]) = {
+  def dropState[T](state: Option[(String, List[String])], acc: List[(String, ListZipper[T])])(
+    f: List[String] => List[T]
+  ) =
     state match {
       case Some((name, cmds)) => (name, ListZipper.of(f(cmds.reverse))) :: acc
       case _ => acc
     }
-  }
 
   def splitfn[T](input: List[String])(f: List[String] => List[T]) = tailRecM(
-    (
-      input.dropWhile(s => !s.endsWith(":")),
-      Option.empty[(String, List[String])],
-      List.empty[(String, ListZipper[T])])
-  ) {
-    case (rest, state, acc) => rest match {
+    (input.dropWhile(s => !s.endsWith(":")), Option.empty[(String, List[String])], List.empty[(String, ListZipper[T])])
+  ) { case (rest, state, acc) =>
+    rest match {
       case s"$fname:" :: next =>
         Left((next, Some((fname, List.empty)), dropState(state, acc)(f)))
       case cmd :: next =>
